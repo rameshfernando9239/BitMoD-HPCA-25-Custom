@@ -3,6 +3,17 @@ import numpy as np
 import math, pickle
 
 
+PRECISION_BITS = {
+    "FP16": 16,
+    "BF16": 16,
+    "FP8": 8,
+    "INT8": 8,
+    "INT4": 4,
+    "INT2": 2,
+    "INT1": 1,
+}
+
+
 class PE_Array:
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
 
@@ -14,29 +25,50 @@ class PE_Array:
     # @param pe_dp_size:    The dot-product size of the PE.
     # @param pe_energy:     The energy cost of PE.
     # @param pe_array_dim:  The dimension of the PE array.
+    # @param act_mode:      Optional activation datatype (e.g. "FP16", "INT8").
+    # @param wei_mode:      Optional weight datatype (e.g. "FP16", "INT8").
     def __init__(
         self,
         model_name: str,
-        i_prec: int=16, 
-        w_prec: int=8, 
+        i_prec: int=16,
+        w_prec: int=8,
         is_bit_serial: bool=False,
         pe_dp_size: int=1,
-        pe_energy: float=0, 
-        pe_area: float=0, 
+        pe_energy: float=0,
+        pe_area: float=0,
         pe_array_dim: List[int]=[],
         context_length: int=256,
         is_generation: bool=False,
+        act_mode: str=None,
+        wei_mode: str=None,
     ):
         assert pe_energy != 0, "ERROR! You must provide the energy cost of a PE."
         assert len(pe_array_dim) == 2, f"ERROR! The dimension of PE array must be 2. But you gave {len(pe_array_dim)}."
         
         self.model_name = model_name
         self.is_bit_serial = is_bit_serial
-        self.i_prec  = i_prec
-        self.w_prec  = w_prec
+
+        # set precision using mode strings if provided
+        if act_mode is not None:
+            act_mode_up = act_mode.upper()
+            assert act_mode_up in PRECISION_BITS, f"Unsupported act_mode {act_mode}"
+            self.act_mode = act_mode_up
+            self.i_prec = PRECISION_BITS[act_mode_up]
+        else:
+            self.act_mode = None
+            self.i_prec = i_prec
+
+        if wei_mode is not None:
+            wei_mode_up = wei_mode.upper()
+            assert wei_mode_up in PRECISION_BITS, f"Unsupported wei_mode {wei_mode}"
+            self.wei_mode = wei_mode_up
+            self.w_prec = PRECISION_BITS[wei_mode_up]
+        else:
+            self.wei_mode = None
+            self.w_prec = w_prec
 
         if is_bit_serial:
-            self.pe_latency = math.ceil(math.floor(w_prec) / 2)
+            self.pe_latency = math.ceil(math.floor(self.w_prec) / 2)
         else:
             self.pe_latency = 1
         self.pe_dp_size = pe_dp_size
@@ -45,8 +77,25 @@ class PE_Array:
         self.pe_area        = pe_area * self.PR_SCALING
         self.pe_array_area  = pe_area * self.total_pe_count
         self.pe_array_dim   = {'h': pe_array_dim[0], 'w': pe_array_dim[1]}
-        
+
         self._init_model_profiler(model_name, context_length, is_generation)
+
+    def set_precision(self, act_mode: str=None, wei_mode: str=None):
+        """Update activation/weight precision using mode strings."""
+        if act_mode is not None:
+            act_mode_up = act_mode.upper()
+            assert act_mode_up in PRECISION_BITS, f"Unsupported act_mode {act_mode}"
+            self.act_mode = act_mode_up
+            self.i_prec = PRECISION_BITS[act_mode_up]
+        if wei_mode is not None:
+            wei_mode_up = wei_mode.upper()
+            assert wei_mode_up in PRECISION_BITS, f"Unsupported wei_mode {wei_mode}"
+            self.wei_mode = wei_mode_up
+            self.w_prec = PRECISION_BITS[wei_mode_up]
+        if self.is_bit_serial:
+            self.pe_latency = math.ceil(math.floor(self.w_prec) / 2)
+        else:
+            self.pe_latency = 1
     
     def _init_model_profiler(self, model_name, context_length: int=256, is_generation: bool=False):
         model_name_dict = {

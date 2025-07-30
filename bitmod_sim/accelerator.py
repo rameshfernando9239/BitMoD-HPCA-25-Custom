@@ -11,20 +11,35 @@ class Accelerator(PE_Array):
     PR_SCALING = 1.5 # scaling factor to account for post placement and routing
 
     def __init__(
-        self, 
+        self,
         model_name: str,
-        i_prec: int=16, 
-        w_prec: int=8, 
+        i_prec: int=16,
+        w_prec: int=8,
         is_bit_serial: bool=False,
         pe_dp_size: int=1,
-        pe_energy: float=0, 
-        pe_area: float=0,  
+        pe_energy: float=0,
+        pe_area: float=0,
         pe_array_dim: List[int]=[],
         init_mem: bool=True,
         context_length: int=256,
         is_generation: bool=False,
-    ): 
-        super().__init__(model_name, i_prec, w_prec, is_bit_serial, pe_dp_size, pe_energy, pe_area, pe_array_dim, context_length, is_generation)
+        act_mode: str=None,
+        wei_mode: str=None,
+    ):
+        super().__init__(
+            model_name,
+            i_prec,
+            w_prec,
+            is_bit_serial,
+            pe_dp_size,
+            pe_energy,
+            pe_area,
+            pe_array_dim,
+            context_length,
+            is_generation,
+            act_mode,
+            wei_mode,
+        )
 
         self.cycle_compute = None
         if init_mem:
